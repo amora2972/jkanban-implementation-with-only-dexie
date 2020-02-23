@@ -21,6 +21,7 @@
     "@angular/router": "~8.2.14",
     "bootstrap": "^4.4.1",
     "dexie": "^2.0.4",
+    "dexie-observable": "^1.0.0-beta.6",
     "dragula": "^3.7.2",
     "jkanban": "^1.2.1",
     "rxjs": "~6.4.0",

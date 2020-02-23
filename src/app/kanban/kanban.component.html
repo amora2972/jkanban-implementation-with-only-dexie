@@ -15,10 +15,10 @@
         </button>
       </div>
       <div class="modal-body">
-        <form>
+        <form (ngSubmit)="addTicketOrUpdateTicket()">
           <div class="form-group">
             <label for="title">Title</label>
-            <input type="text" id="title" class="form-control" [(ngModel)]="newTicket.title" name="titleInput">
+            <input type="text" id="title" class="form-control" [(ngModel)]="newTicket.originalTitle" name="titleInput">
           </div>
           <div class="form-group">
             <label for="deal-status">Deal Status</label>
@@ -27,16 +27,22 @@
             </select>
           </div>
 
-          <button *ngIf="whichModal !== 'add'" class="btn btn-danger" (click)="removeTicket()"
+
+          <div class="custom-file mb-2">
+            <input class="custom-file-input" type="file" id="customFile" (change)="onImageSelected($event)" name="file">
+            <label class="custom-file-label" for="customFile">Choose file</label>
+          </div>
+        </form>
+        <div *ngIf="whichModal !== 'add'">
+          <button class="btn btn-danger" (click)="removeTicket()"
                   [disabled]="deleteClicked">
             Delete
           </button>
-        </form>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" (click)="closeModal()">Close</button>
-        <button type="button" class="btn btn-primary" (click)="addTicketOrUpdateTicket()" [disabled]="addClicked">Save
-        </button>
+        <button type="button" class="btn btn-primary" [disabled]="addClicked" (click)="addTicketOrUpdateTicket()">Save</button>
       </div>
     </div>
   </div>

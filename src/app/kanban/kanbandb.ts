@@ -15,7 +15,7 @@ class KanbanDatabase extends Dexie {
     // create db
     db.version(1).stores({
       columns: '++id, title',
-      tickets: '++id, title, columnId, order'
+      tickets: '++id, title, columnId, order, image'
     });
 
     // this operation will run on every columns reading operation.
@@ -27,19 +27,25 @@ class KanbanDatabase extends Dexie {
     // this operation will run on every ticket adding operation.
     db.tickets.hook('creating', (primaryKey: number, obj: ITicket, transaction) => {
       obj.columnId = +obj.columnId;
+      obj.title = obj.originalTitle;
+      delete obj.originalTitle;
     });
 
     // this operation will run on every ticket reading operation.
     db.tickets.hook('reading', (obj: ITicket) => {
       obj.id = String(obj.id);
       obj.columnId = String(obj.columnId);
+      obj.originalTitle = obj.title;
+      obj.title = `<img src='${obj.image}' class="img-fluid"> ` + obj.title;
       return obj;
     });
 
     // this operation will run on every ticket updating operation.
     db.tickets.hook('updating', (modifications: ITicket, primKey: number, obj: ITicket, transaction) => {
       modifications.columnId = +modifications.columnId;
-      return modifications;
+      modifications.title = modifications.originalTitle || obj.title;
+      delete modifications.originalTitle;
+      delete obj.originalTitle;
     });
 
     // only runs the first time when the db is initialized

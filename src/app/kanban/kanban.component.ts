@@ -1,4 +1,4 @@
-import {Component, OnInit} from '@angular/core';
+import {Component, ElementRef, HostListener, OnInit} from '@angular/core';
 import {jKanban} from 'jkanban';
 import {KanbanService} from './kanban.service';
 import {ITicket} from './interfaces/ticket.interface';
@@ -22,6 +22,8 @@ export class KanbanComponent implements OnInit {
   addClicked: boolean;
   newTicket: ITicket;
   columns: IColumn[] = [];
+  draggedElement: ITicket;
+  loadMoreButton: HTMLElement;
 
   constructor(private kanbanService: KanbanService) {
     this.newTicket = new Ticket();
@@ -35,10 +37,11 @@ export class KanbanComponent implements OnInit {
   ngOnInit(): void {
     this.kanbanService.fetchColumns().then((columns: IColumn[]) => {
       this.columns = columns;
+
       this.kanban = new jKanban({
         element: '#kanban',
         gutter: '10px',
-        widthBoard: '300px',
+        widthBoard: '400px',
         itemHandleOptions: {enabled: false},
         addItemButton: true,
         dragBoards: true,
@@ -46,13 +49,48 @@ export class KanbanComponent implements OnInit {
         boards: columns,
         dropEl: (el, target, source, sibling) => this.onElementDropped(el, target, source, sibling),
         buttonClick: (el, boardId) => this.onTicketAdd(el, boardId),
-        click: (el) => this.onTicketEdit(el)
+        click: (el) => this.onTicketEdit(el),
+        dragEl: (el, source) => {
+          const columnId = source.parentElement.getAttribute('data-id');
+          const id = el.dataset.eid;
+
+          this.draggedElement = new Ticket({
+            id,
+            title: el.innerText,
+            columnId,
+            order: this.getOrderOfAnElementInBoard(columnId, id)
+          });
+        }
+      });
+
+      this.loadMoreButton = document.createElement('button');
+      this.loadMoreButton.setAttribute('class', 'btn btn-success not-draggable');
+      this.loadMoreButton.innerText = 'Load More';
+
+      // infinite scrolling
+      this.columns.forEach((item: IColumn) => {
+        if (item.totalTicketsLeft > 0) {
+          this.loadMoreButton.setAttribute('id', item.id);
+
+          this.kanban.addForm(item.id, this.loadMoreButton);
+          this.loadMoreButton.addEventListener('click', (e: MouseEvent) => {
+            e.preventDefault();
+            const currentItems = this.kanban.getBoardElements(item.id); // button load more included
+            this.kanbanService.fetchColumnWithTickets(+item.id, currentItems.length - 1).then((newColumn: IColumn) => {
+              this.loadMoreButton.remove();
+              newColumn.item.forEach((ticket: ITicket) => this.kanban.addElement(newColumn.id, ticket));
+              if (newColumn.totalTicketsLeft > 0) {
+                this.kanban.addForm(this.loadMoreButton);
+              }
+            });
+          });
+        }
       });
     }).catch((err) => this.throwAnError(err));
   }
 
   /*
-  * @parameters:
+  * @param
   * el: the dropped ticket.
   * target: the column the ticket was dropped into
   * source: the column the ticket was in
@@ -62,11 +100,26 @@ export class KanbanComponent implements OnInit {
     const ticketId: string = el.getAttribute('data-eid');
     const newColumn: string = target.parentElement.getAttribute('data-id');
     const oldColumn: string = source.parentElement.getAttribute('data-id');
-    this.regenerateOrderOnElementDropped(newColumn, oldColumn);
+    const ord = this.getOrderOfAnElementInBoard(newColumn, ticketId);
+
+    const ticket = new Ticket({
+      id: +ticketId,
+      columnId: +newColumn,
+      order: ord,
+      title: el.innerText
+    });
+
+    this.kanbanService.updateTicket(ticket).then((updatedTicket: ITicket) => {
+      this.kanbanService.regenerateByIncrement(+newColumn, updatedTicket).then(() => {
+        if (oldColumn !== newColumn) {
+          this.kanbanService.regenerateByDecrement(+oldColumn, this.draggedElement);
+        }
+      });
+    });
   }
 
   /*
-  * @parameters:
+  * @param
   * el: the clicked html button.
   * columnId: location of the clicked button.
   * this method will show the modal, and assign whichModal a value.
@@ -79,7 +132,7 @@ export class KanbanComponent implements OnInit {
   }
 
   /*
-  * @parameters:
+  * @param
   * el: the clicked html ticket.
   * fetch the clicked ticket data from indexed db and assign it to the newTicket.
   * show the modal and assign whichModal a value.
@@ -112,9 +165,16 @@ export class KanbanComponent implements OnInit {
   * adds a new ticket to the kanban board.
   * */
   addTicket(): void {
+    const existingLoadMoreButton = document.getElementById(this.newTicket.columnId);
     this.newTicket.order = this.getTicketOrderOnElementAdded(this.newTicket.columnId);
     this.kanbanService.storeTicket(this.newTicket).then((response: ITicket) => {
+      if (existingLoadMoreButton) {
+        existingLoadMoreButton.remove();
+      }
       this.kanban.addElement(response.columnId, response);
+      if (existingLoadMoreButton) {
+        this.kanban.addForm(this.newTicket.columnId, existingLoadMoreButton);
+      }
       this.closeModal();
     }).catch((err) => this.throwAnError(err));
   }
@@ -149,60 +209,47 @@ export class KanbanComponent implements OnInit {
     this.kanbanService.destroyElement(this.newTicket.id).then((id: number) => {
       this.showModal = false;
       this.kanban.removeElement(id);
+      console.log(this.newTicket);
+      this.kanbanService.regenerateByDecrement(+this.newTicket.columnId, this.newTicket);
     }).catch((err) => this.throwAnError(err));
   }
 
-
   /*
-  * @parameters:
-  * newColumnId: is the new column the element was dropped in
-  * oldColumnId: the old column the element was in
-  * */
-  regenerateOrderOnElementDropped(newColumnId: string, oldColumnId: string): void {
-    this.regenerateOrderOfColumn(newColumnId);
-
-    /* when the old column is not the same as the new column
-    * regenerate the order of the old column
-    * */
-    if (newColumnId !== oldColumnId) {
-      this.regenerateOrderOfColumn(oldColumnId);
-    }
-  }
-
-  /*
-  * @parameters:
-  * columnId: the id of the column to generate its order.
-  * all elements in a column will be taken from jkanban
-  * data will be extracted of all the html elements
-  * batch update will occur at the end
-  * */
-  regenerateOrderOfColumn(columnId: string): void {
-    const allEl: HTMLElement[] = this.kanban.getBoardElements(columnId);
-    const tickets: Ticket[] = [];
-
-    allEl.forEach((item, index) => {
-      tickets.push(new Ticket({
-        id: +item.dataset.eid, // cast id to number for update operation
-        title: item.innerText,
-        columnId,
-        order: index
-      }));
-    });
-    this.kanbanService.batchUpdate(tickets).catch((err) => this.throwAnError(err));
-  }
-
-  /*
-  * @parameters:
+  * @param
   * columnId to get the length of it
   * returning the order of a newly added ticket
-  * */
+  */
   getTicketOrderOnElementAdded(columnId: string): number {
     const allEl = this.kanban.getBoardElements(columnId);
     return allEl.length;
   }
 
+  getOrderOfAnElementInBoard(columnId: string, id: string): number {
+    let order = 0;
+    const allEl: HTMLElement[] = this.kanban.getBoardElements(columnId);
+    allEl.forEach((item: HTMLElement, index: number) => {
+      if (item.dataset.eid === id) {
+        order = index;
+      }
+    });
+    return order;
+  }
+
   closeModal(): void {
     this.showModal = false;
+  }
+
+  onImageSelected(event) {
+    const file = event.target.files[0];
+    if (file) {
+      const fileReader = new FileReader();
+      fileReader.readAsDataURL(file);
+      console.log({fileReader});
+      fileReader.onload = (e) => {
+        // @ts-ignore
+        this.newTicket.image = e.target.result;
+      };
+    }
   }
 
   throwAnError(err: any) {
