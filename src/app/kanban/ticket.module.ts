@@ -17,12 +17,5 @@ export class Ticket implements ITicket {
       this.order = ticket.order;
     }
   }
-
-  prepareForUpdate() {
-    this.id = +this.id;
-    this.columnId = +this.columnId;
-    this.title = this.originalTitle;
-    delete this.originalTitle;
-  }
 }
 
