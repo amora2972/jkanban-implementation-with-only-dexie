@@ -1,5 +1,5 @@
 /* You can add global styles to this file, and also import other style files */
-.kanban-board {
+.kanban-drag {
   overflow-y: auto;
   max-height: 300px;
 }

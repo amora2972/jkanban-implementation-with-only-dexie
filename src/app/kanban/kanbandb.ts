@@ -36,7 +36,10 @@ class KanbanDatabase extends Dexie {
       obj.id = String(obj.id);
       obj.columnId = String(obj.columnId);
       obj.originalTitle = obj.title;
-      obj.title = `<img src='${obj.image}' class="img-fluid"> ` + obj.title;
+
+      if (obj.image) {
+        obj.title = `<img src='${obj.image}' class="img-fluid"> ` + obj.title;
+      }
       return obj;
     });
 

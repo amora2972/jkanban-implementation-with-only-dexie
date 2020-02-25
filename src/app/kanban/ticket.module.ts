@@ -2,18 +2,27 @@ import {ITicket} from './interfaces/ticket.interface';
 
 export class Ticket implements ITicket {
   id?: any;
-  columnId: any;
   title: string;
+  originalTitle?: string;
+  columnId: any;
   order: number;
+  image?: Blob;
 
 
   constructor(ticket?: ITicket) {
     if (ticket) {
       this.id = ticket.id || null;
-      this.order = ticket.order;
-      this.columnId = ticket.columnId;
       this.title = ticket.title;
+      this.columnId = ticket.columnId;
+      this.order = ticket.order;
     }
+  }
+
+  prepareForUpdate() {
+    this.id = +this.id;
+    this.columnId = +this.columnId;
+    this.title = this.originalTitle;
+    delete this.originalTitle;
   }
 }
 
